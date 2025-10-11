@@ -59,9 +59,17 @@ app.post('/api/add-to-cart', async (req, res) => {
           'Content-Type': 'application/json',
           'X-HostedShop-ApiKey': process.env.HOSTEDSHOP_API_KEY,
           'X-HostedShop-Id': process.env.HOSTEDSHOP_ID
-        }
+        },
+        // 👇 allow axios to include cookies
+        withCredentials: true
       }
     );
+
+    // 👇 Forward Hostedshop's cookie to the browser
+    const setCookie = response.headers['set-cookie'];
+    if (setCookie) {
+      res.setHeader('set-cookie', setCookie);
+    }
 
     res.json(response.data);
   } catch (error) {
