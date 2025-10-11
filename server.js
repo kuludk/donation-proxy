@@ -7,17 +7,7 @@ app.use(cors());
 
 const PORT = process.env.PORT || 3000;
 
-function extractVariants(raw) {
-  try {
-    const wrapped = JSON.parse(raw.Content);
-    const inner = wrapped.objects?.[0]?.content;
-    return JSON.parse(inner); // ← this is the actual array
-  } catch (err) {
-    console.error('Failed to parse Hostedshop JSON:', err.message);
-    return [];
-  }
-}
-
+// Temporary debug version: just log the raw Hostedshop response
 app.get('/api/donation-options', async (req, res) => {
   try {
     const [oneTime, recurring] = await Promise.all([
@@ -25,10 +15,12 @@ app.get('/api/donation-options', async (req, res) => {
       axios.get('https://shop.givenpigeret.dk/json/productvariants/data/62')
     ]);
 
-    const engangsbidrag = extractVariants(oneTime.data);
-    const fastbidrag = extractVariants(recurring.data);
+    // 👇 These logs will show us the exact structure in Render’s logs
+    console.log('One-time RAW:', oneTime.data);
+    console.log('Recurring RAW:', recurring.data);
 
-    res.json({ engangsbidrag, fastbidrag });
+    // For now, just return the raw data so we can inspect it
+    res.json({ oneTime: oneTime.data, recurring: recurring.data });
   } catch (error) {
     console.error('Error fetching donation data:', error.message);
     res.status(500).json({ error: 'Failed to fetch donation options' });
