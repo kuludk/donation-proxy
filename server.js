@@ -7,6 +7,17 @@ app.use(cors());
 
 const PORT = process.env.PORT || 3000;
 
+function extractVariants(raw) {
+  try {
+    const wrapped = JSON.parse(raw.Content);
+    const inner = wrapped.objects?.[0]?.content;
+    return JSON.parse(inner);
+  } catch (err) {
+    console.error('Failed to parse Hostedshop JSON:', err.message);
+    return [];
+  }
+}
+
 app.get('/api/donation-options', async (req, res) => {
   try {
     const [oneTime, recurring] = await Promise.all([
@@ -14,13 +25,10 @@ app.get('/api/donation-options', async (req, res) => {
       axios.get('https://shop.givenpigeret.dk/json/productvariants/data/62')
     ]);
 
-    console.log('Engangsbidrag:', oneTime.data);
-    console.log('Fast bidrag:', recurring.data);
+    const engangsbidrag = extractVariants(oneTime.data);
+    const fastbidrag = extractVariants(recurring.data);
 
-    res.json({
-      engangsbidrag: oneTime.data?.variants || [],
-      fastbidrag: recurring.data?.variants || []
-    });
+    res.json({ engangsbidrag, fastbidrag });
   } catch (error) {
     console.error('Error fetching donation data:', error.message);
     res.status(500).json({ error: 'Failed to fetch donation options' });
