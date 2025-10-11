@@ -7,11 +7,13 @@ app.use(cors());
 
 const PORT = process.env.PORT || 3000;
 
+// Helper function to extract variants from Hostedshop's nested JSON
 function extractVariants(raw) {
   try {
-    const wrapped = JSON.parse(raw.Content);
-    const inner = wrapped.objects?.[0]?.content;
-    return JSON.parse(inner);
+    const wrapped = JSON.parse(raw.Content); // First layer
+    const inner = wrapped.objects?.[0]?.content; // Second layer
+    const parsed = JSON.parse(inner); // Final layer
+    return parsed.variants || [];
   } catch (err) {
     console.error('Failed to parse Hostedshop JSON:', err.message);
     return [];
