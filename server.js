@@ -7,7 +7,6 @@ app.use(cors());
 
 const PORT = process.env.PORT || 3000;
 
-// Temporary debug version: just log the raw Hostedshop response
 app.get('/api/donation-options', async (req, res) => {
   try {
     const [oneTime, recurring] = await Promise.all([
@@ -15,12 +14,23 @@ app.get('/api/donation-options', async (req, res) => {
       axios.get('https://shop.givenpigeret.dk/json/productvariants/data/62')
     ]);
 
-    // 👇 These logs will show us the exact structure in Render’s logs
-    console.log('One-time RAW:', oneTime.data);
-    console.log('Recurring RAW:', recurring.data);
+    // One-time is already a clean array
+    const engangsbidrag = oneTime.data.map(v => ({
+      id: v.Id,
+      title: v.Title
+    }));
 
-    // For now, just return the raw data so we can inspect it
-    res.json({ oneTime: oneTime.data, recurring: recurring.data });
+    // Recurring: split into frequency vs amount
+    const fastbidrag = {
+      frequency: recurring.data
+        .filter(v => v.TypeId === 8)
+        .map(v => ({ id: v.Id, title: v.Title })),
+      amounts: recurring.data
+        .filter(v => v.TypeId === 7)
+        .map(v => ({ id: v.Id, title: v.Title }))
+    };
+
+    res.json({ engangsbidrag, fastbidrag });
   } catch (error) {
     console.error('Error fetching donation data:', error.message);
     res.status(500).json({ error: 'Failed to fetch donation options' });
