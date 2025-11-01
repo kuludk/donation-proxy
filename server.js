@@ -6,48 +6,55 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
-const PORT = process.env.PORT || 3000;
-
 // --- Donation options route ---
 app.get('/api/donation-options', async (req, res) => {
   try {
-    const [oneTime, recurring] = await Promise.all([
-      axios.get('https://shop.givenpigeret.dk/json/productvariants/data/14'),
-      axios.get('https://shop.givenpigeret.dk/json/productvariants/data/62')
-    ]);
+    // Example: fetch product variants from HostedShop GraphQL
+    const query = `
+      {
+        products {
+          id
+          title
+          variants {
+            id
+            title
+          }
+        }
+      }
+    `;
 
-    const engangsbidrag = oneTime.data.map(v => ({
-      id: v.Id,
-      title: v.Title
-    }));
+    const response = await axios.post(
+      'https://shop13134.mywebshop.io/api/graphql',
+      { query },
+      {
+        headers: {
+          'Content-Type': 'application/json',
+          'X-HostedShop-ApiKey': process.env.HOSTEDSHOP_API_KEY,
+          'X-HostedShop-Id': process.env.HOSTEDSHOP_ID,
+        },
+      }
+    );
 
-    const fastbidrag = {
-      frequency: recurring.data
-        .filter(v => v.TypeId === 8)
-        .map(v => ({ id: v.Id, title: v.Title })),
-      amounts: recurring.data
-        .filter(v => v.TypeId === 7)
-        .map(v => ({ id: v.Id, title: v.Title }))
-    };
-
-    res.json({ engangsbidrag, fastbidrag });
-  } catch (error) {
-    console.error('Error fetching donation data:', error.message);
+    // You can shape the data here however you like
+    res.json(response.data.data);
+  } catch (err) {
+    console.error('Error fetching donation options:', err.message);
     res.status(500).json({ error: 'Failed to fetch donation options' });
   }
 });
 
-// --- Add-to-cart route ---
+// --- Old add-to-cart route (still here if you need it) ---
 app.post('/api/add-to-cart', async (req, res) => {
   const { productId, variantIds } = req.body;
 
   try {
-    // Build GraphQL mutation with one addToCart per variant
-    const mutations = variantIds.map(vid => `
-      addToCart${vid}: addToCart(input: { productId: ${productId}, variantId: ${vid}, quantity: 1 }) {
-        cart { id }
-      }
-    `);
+    const mutations = variantIds.map(
+      (vid, i) => `
+        addToCart${i}: addToCart(input: { productId: ${productId}, variantId: ${vid}, quantity: 1 }) {
+          cart { id checkoutUrl }
+        }
+      `
+    );
 
     const query = `mutation { ${mutations.join('\n')} }`;
 
@@ -58,26 +65,61 @@ app.post('/api/add-to-cart', async (req, res) => {
         headers: {
           'Content-Type': 'application/json',
           'X-HostedShop-ApiKey': process.env.HOSTEDSHOP_API_KEY,
-          'X-HostedShop-Id': process.env.HOSTEDSHOP_ID
+          'X-HostedShop-Id': process.env.HOSTEDSHOP_ID,
         },
-        // 👇 allow axios to include cookies
-        withCredentials: true
       }
     );
 
-    // 👇 Forward Hostedshop's cookie to the browser
-    const setCookie = response.headers['set-cookie'];
-    if (setCookie) {
-      res.setHeader('set-cookie', setCookie);
-    }
-
-    res.json(response.data);
-  } catch (error) {
-    console.error('Error adding to cart:', error.message);
+    res.json(response.data.data);
+  } catch (err) {
+    console.error('Error adding to cart:', err.message);
     res.status(500).json({ error: 'Failed to add to cart' });
   }
 });
 
-app.listen(PORT, () => {
-  console.log(`Donation proxy running on port ${PORT}`);
+// --- New create-donation route (the fix!) ---
+app.post('/api/create-donation', async (req, res) => {
+  const { productId, variantIds } = req.body;
+
+  try {
+    const mutations = variantIds.map(
+      (vid, i) => `
+        addToCart${i}: addToCart(input: { productId: ${productId}, variantId: ${vid}, quantity: 1 }) {
+          cart { id checkoutUrl }
+        }
+      `
+    );
+
+    const query = `mutation { ${mutations.join('\n')} }`;
+
+    const response = await axios.post(
+      'https://shop13134.mywebshop.io/api/graphql',
+      { query },
+      {
+        headers: {
+          'Content-Type': 'application/json',
+          'X-HostedShop-ApiKey': process.env.HOSTEDSHOP_API_KEY,
+          'X-HostedShop-Id': process.env.HOSTEDSHOP_ID,
+        },
+      }
+    );
+
+    // Grab checkoutUrl from the first addToCart mutation
+    const checkoutUrl =
+      response.data?.data?.addToCart0?.cart?.checkoutUrl ||
+      response.data?.data?.addToCart?.cart?.checkoutUrl;
+
+    if (!checkoutUrl) {
+      throw new Error('No checkoutUrl returned from HostedShop');
+    }
+
+    res.json({ checkoutUrl });
+  } catch (err) {
+    console.error('Error creating donation order:', err.message);
+    res.status(500).json({ error: 'Failed to create donation order' });
+  }
 });
+
+// --- Start server ---
+const PORT = process.env.PORT || 3000;
+app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
